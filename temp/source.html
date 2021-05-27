@@ -1,0 +1,522 @@
+<html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta http-equiv="x-ua-compatible" content="ie=7"><title>
+	测试进行中……
+</title><link href="../style/test.css" rel="stylesheet" type="text/css"><link href="../style/stu/common.css" rel="stylesheet" type="text/css"><link href="../style/stylesheet.css" rel="stylesheet" type="text/css">
+    <script type="text/javascript" src="../script/jquery-1.6.4.min.js"></script>
+    <script type="text/javascript" src="../script/npLearningTest.js"></script>
+    <script type="text/javascript" src="../script/swfobject.js"></script>
+    <script type="text/javascript" src="../script/testrecord.js"></script>
+    
+		<script type="text/javascript" src="../script/jwplayer.js"></script>
+		<script type="text/javascript" src="../script/jwpsrv.js"></script>	
+		<script type="text/javascript" src="../script/jwpsrv_frq.js"></script>	
+		<script type="text/javascript" src="../script/respond.src.js"></script>
+    <style>
+        .test_list_2 input[type="text"] {*width:80px;}
+    </style>
+    <script language="javascript">
+    
+    var resPath = "http://202.202.136.27/NPLearningTest/";
+    var rtmServer = "rtmp://202.202.136.27:1935/recording";
+    var _postUrl="../NPLearningTest/uploadRecord.aspx";
+    var _playUlr="../apps/Recording/streams/";
+    
+document.oncontextmenu=new Function("event.returnValue=false;");
+document.onselectstart=new Function("event.returnValue=false;");
+
+//    parent.ShowTestHeader();
+    $(document).ready(function(){
+        InitParts();
+        InitAnswerSheet();  
+    });
+    
+    function StartTimer()
+    {
+        var minutes = $('#hdMinutes').val();
+        seconds = minutes*60;
+        
+        var secondsUsed = $('#hdSecondsUsed').val();
+        seconds -= secondsUsed;
+        
+        timer = setInterval('ShowTimer();', 1000);
+    }
+    
+    function InitParts()
+    {
+        $.ajax({
+            url:"DoTestTask.aspx",
+            data: {action: 'initParts', ttid: 12887, sheetid: 1018, sttid:sttid, nocache: Math.random()},
+            type:"POST",
+            success:function(ret)
+            {
+                $(window.parent.document).find('#ulParts').html(ret);
+                if ($(window.parent.document).find('#ulParts a').length > 1)
+                    $('#btnNextPart').show();
+                    
+                ShowPart(curPartNum); 
+            }
+        });
+    }
+    function InitAnswerSheet()
+    {
+        $.ajax({
+            url:"DoTestTask.aspx",
+            data: {action: 'initAnswerSheet', ttid: 12887, sheetid: 1018, sttid:sttid, nocache: Math.random()},
+            type:"POST",
+            success:function(ret)
+            {
+                $('#ulAnswerSheet').html(ret);
+                QuestionItemsFloat();
+            }
+        });
+    }
+    
+    var seconds = 0;
+    var timer = null;
+    var curPartNum = 1;
+    var submited = false;
+    function ShowTimer()
+    {
+        seconds--;
+        var m = parseInt(seconds/60);
+        var s = seconds%60;
+        var timeDisplay = ((m>=10)?m:('0'+m)) + ':' + ((s>=10)?s:('0'+s));
+        $(window.parent.document).find('#liTimer').text(timeDisplay);
+        
+        if (seconds <= 0)
+        {
+            clearInterval(timer);           
+            SaveCurrentPart(true);
+            alert('测试时间结束，系统已自动交卷'); 
+            
+//            Return('');
+        }
+    }
+    function ShowPart(num)
+    {
+        //相关按钮      
+        if (num >= $(window.parent.document).find('#ulParts a').length)
+        {
+            $('#btnNextPart').hide(); 
+            $('#btnBottomSubmit').show(); 
+        }
+        else   
+        {
+            $('#btnNextPart').show();  
+            $('#btnBottomSubmit').hide(); 
+        }
+        if (num == 1)       
+            $('#btnPrevPart').hide();
+        else
+            $('#btnPrevPart').show();
+        
+        //选中标签样式修改
+        $(window.parent.document).find('.test_part_current').removeClass("test_part_current");
+        $(window.parent.document).find('#aPart'+num).addClass("test_part_current");
+        
+        //获取part内容，对应的html 加载入test_frame
+        $.ajax({
+            url:"DoTestTask.aspx",
+            data: {action: 'getPart', partnum:num, ttid: 12887, sheetid: 1018, sttid:sttid, nocache: Math.random()},
+            type:"POST",
+            async:false,
+            success:function(ret)
+            {
+                $('.test_frame').html(ret);
+                curPartNum = num;
+                
+                $('input:text').each(function(){
+                    if ($(this).attr("onchange") != undefined)
+                        resize_txt(document.getElementById($(this).attr("id")));
+                });  
+            
+                //阅读题型小题区高度设置
+                $('.test_list_5_2').each(function(){
+                   $(this).height($(this).siblings('.test_list_5').eq(0).height());
+                });                
+                
+                var testframeHeight = $('.test_frame').eq(0).height();
+                var answersheetHeight = $('.answer_sheet').eq(0).height();
+                parent.document.getElementById("mainFrame").height=Math.max(testframeHeight, answersheetHeight)+90;
+                
+                parent.TINY.box.hide();
+            }
+        });
+    }
+    
+    var sttid = -1;
+    function SaveCurrentPart(isTotalSubmit)
+    {
+        if (submited)
+            return;
+            
+        //整理答题情况
+        var answerXml = GenerateAnswerXML();
+        
+        //ajax 保存part答题情况
+        $.ajax({
+            url:"DoTestTask.aspx",
+            data: {action: 'savePart', answer:escape(answerXml), partnum:curPartNum, account:'2019222760', useSeconds:($('#hdMinutes').val()*60-seconds), sttid:sttid, ttid: 12887, sheetid: 1018, issubmit:isTotalSubmit, nocache: Math.random()},
+            type:"POST",
+            async: false,
+            success:function(ret)
+            {
+                sttid = ret;
+                if (isTotalSubmit)
+                {
+                    submited = true;
+                    Return('Student/');
+                }                    
+            }
+        });
+    }
+    
+    function SelPart(num)
+    {
+        jwplayer("soundplayer").stop();
+        
+        //保存当前的答题
+        SaveCurrentPart(false);
+        
+        parent.scrollTo(0,0);
+        //加载所选的part内容
+        ShowPart(num);
+    }
+    function SelPrevPart()
+    {
+        var num = $(window.parent.document).find('.test_part_current').eq(0).attr('id');
+        num = parseInt(num.substring(5)) - 1;
+        
+        SelPart(num);
+    }
+    function SelNextPart()
+    {
+        var num = $(window.parent.document).find('.test_part_current').eq(0).attr('id');
+        num = parseInt(num.substring(5)) + 1;
+        
+        SelPart(num);
+    }
+    
+    function TemporarySubmit()
+    {
+        SaveCurrentPart(false);
+        //返回
+        Return('Student/');
+    }
+    function SubmitTest()
+    {
+        if (!confirm('确认交卷吗？'))
+            return;
+            
+        SaveCurrentPart(true);
+        //返回
+//        Return('Student/');
+    }
+    function Return(prefix)
+    {
+        parent.HideTestHeader();
+        location.href= '/npels/Student/TestTask.aspx?c=2021-0003-0314&m=College_English_NEW_Century_Integration_4&pi=0&nocache='+Math.random();
+    }
+    
+    function SelQuestion(partnum, num)
+    {
+        SelPart(partnum);
+        //选中answer sheet中的小题编号        
+        if ($('#question_'+num).length > 0)
+            parent.ShowTestPosition($('#question_'+num).offset().top-200);
+    }
+    
+    /*答卷过程中调用的方法*/
+    var soundfile = "";	
+    function PlaySound(src, id)
+    {
+		if (soundfile == "")
+		{
+			soundfile = resPath+"/ItemRes/sound/"+src;
+			createSoundPlayer();
+		}
+		else
+		{
+			soundfile = resPath+"/ItemRes/sound/"+src;
+			jwplayer("soundplayer").load([{file:soundfile}]);
+		}
+		jwplayer("soundplayer").onPlaylistComplete(function(){
+			jwplayer("soundplayer").load([{file:""}]);
+		});
+		jwplayer("soundplayer").play();
+		
+		var sp = $('#btnPlay_'+id);
+		if (sp.length>0)
+		{
+		    var count = sp.val();
+		    count = count.substring(count.indexOf('（')+1);
+		    count = count.substring(0, count.indexOf('次'));
+		    count--;
+		    
+		    sp.val('播放（'+count+'次机会）');
+		    if (count == 0)
+		        $('#btnPlay_'+id).attr("disabled","disabled");
+		}
+    }
+	function createSoundPlayer(){
+		jwplayer("soundplayer").setup({
+			flashplayer:"../script/jwplayer.flash.swf?c="+Math.random(),
+			file:soundfile,
+			height:0,
+			width:0,
+			primary:"flash"
+		});
+	}
+    
+    var txtsize = 8;
+    var max_length = 26;
+    function resize_txt(ctr) {
+        if(ctr.value==null || ctr.value=="") 
+        {
+            ctr.size = txtsize;
+            ctr.style.width = txtsize*10;
+        }
+        else if((ctr.value.length >= txtsize) && (ctr.value.length <= max_length)) 
+        {
+            ctr.size = ctr.value.length + 3;
+            ctr.style.width = ctr.value.length*10 + 10;
+        }
+        else if (ctr.value.length>max_length)
+        {
+            ctr.size = max_length + 3;
+            ctr.style.width = max_length*10+10;
+        }
+        else 
+        {
+            ctr.size = txtsize;
+            ctr.style.width = txtsize*10;
+        }
+    }
+    
+    function ChangeWordCount(id)
+    {
+        var content = $('#ta_' + id).val();
+        content = content.replace(/\n/g,' ');
+        content = content.replace(/^\s\s*/, '').replace(/\s\s*$/, '');
+        if (content == '')
+            $('#spWordCount_' + id).text(0);
+        else
+            $('#spWordCount_' + id).text(content.split(/\s+/g).length);
+    }
+    
+    function MarkChoiceQuestionDone(Num)
+    {
+        if(!$('#asSpan_'+Num).hasClass('answersheet_disable'))
+            $('#asSpan_'+Num).addClass('answersheet_disable');
+    }
+    function MarkQuestionDone(ctr, Num)
+    {
+        if ($(ctr).val() != '')
+        {
+            if(!$('#asSpan_'+Num).hasClass('answersheet_disable'))
+                $('#asSpan_'+Num).addClass('answersheet_disable');
+        }
+        else
+        {
+            if($('#asSpan_'+Num).hasClass('answersheet_disable'))
+                $('#asSpan_'+Num).removeClass('answersheet_disable');
+        }
+    }
+    function finishRecord(filename)
+    {
+        var fileinfo = filename.split('_');
+        var qnum = fileinfo[4];
+        if(!$('#asSpan_'+qnum).hasClass('answersheet_disable'))
+            $('#asSpan_'+qnum).addClass('answersheet_disable');
+            
+        $('#hdRecord_'+qnum).val(filename+'.flv');
+    }
+    
+    //ErrorCorrectionSentence 选中选项
+    function ECSSel(id, txt, position)
+    {
+        $('#liECS_'+id).text(txt+' - ');
+        $('#hdECS_'+id).val(position);
+    }
+    
+    //选词填空，判断填的是否是编号
+    function CheckBankedClozeInput(ctr)
+    {
+        var isLetter = false;
+        var val = ctr.value;
+        if (val != '')
+        {
+            if (val.length==1)
+            {
+                var code = parseInt(val.toLowerCase().charCodeAt(0));
+                if (code >= 97 && code <= 122)
+                    isLetter = true;
+            }
+        }
+        else
+            isLetter = true;
+            
+        if (!isLetter)
+        {
+            alert('Please input the letter identify the choice.');
+            ctr.focus();
+        }
+    }
+    
+    function ShowOralItems(id, src, duration)
+    {
+        //隐藏“开始答题”按钮，显示题干内容
+        $('#btnOralItemStart_'+id).parent().parent().hide();
+        $('#ulOralItemStart_'+id).show();
+        //播放题干音频
+        PlaySound(src);
+        //题干音频结束后，显示题目内容
+        setTimeout('ShowOralQuestions("'+id+'")', duration*1000);
+    }
+    
+    function ShowOralQuestions(id)
+    {
+        $('#ulOralQuestions_'+id).show();
+    }    
+    function CreateVideoPlayer(playerID, src)
+    {
+	    var videofile = resPath+"/ItemRes/video/"+src;
+		jwplayer(playerID).setup({
+			flashplayer:"../script/jwplayer.flash.swf?c="+Math.random(),
+			file:videofile,
+			height:180,
+			width:280,
+			primary:"flash"
+		});
+    }    
+    function CreateRecorder(playerID, duration)
+    {
+        var filename = '12887_2021-0003-0314_2019222760_'+sttid+'_'+playerID.replace('divRecorder_','');
+        CreateRecorderPlayer(filename, playerID);
+    }
+    function PlayRecordSound(src)
+    {
+		if (soundfile == "")
+		{
+			soundfile = "../apps/Recording/streams/"+src;
+			createSoundPlayer();
+		}
+		else
+		{
+			soundfile = "../apps/Recording/streams/"+src;
+			jwplayer("soundplayer").load([{file:soundfile}]);
+		}
+		jwplayer("soundplayer").onPlaylistComplete(function(){
+			jwplayer("soundplayer").load([{file:""}]);
+		});
+		jwplayer("soundplayer").play();
+    }
+    
+    function Leave()
+    {
+        SaveCurrentPart(false);
+        parent.HideTestHeader();
+    }
+    
+    function QuestionItemsFloat()
+    {
+        var $sidebar   = $("#sidebar"),  
+            $window    = $(parent.window),  
+            offset     = $sidebar.offset(),  
+		    height=$sidebar.height()-$window.height()+92;//超出屏幕的高度
+
+        $window.scroll(function() {  
+            if (height>0){       
+			    if ($window.scrollTop() > height) {  
+
+				    $sidebar.stop().animate({
+				       marginTop: $window.scrollTop() - height -30 
+				    });
+
+			    } else {  
+			    
+				    $sidebar.stop().animate({
+				       marginTop: 10
+				    });
+			    }  
+		    }else{
+			    if ($window.scrollTop() > offset.top) {  
+				    $sidebar.stop().css("margin-top", $window.scrollTop() - offset.top + 71 );
+			    } else {  
+				    $sidebar.css("margin-top", 10);
+			    }  
+		    }
+        });  
+    }
+    </script>
+</head>
+<body onunload="Leave();" marginwidth="0" marginheight="0">
+    <form name="form1" method="post" action="DoTestTask.aspx?type=do&amp;ttid=12887&amp;c=2021-0003-0314&amp;pi=0&amp;f=TestTask&amp;m=College_English_NEW_Century_Integration_4" id="form1">
+<div>
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="/wEPDwULLTE2NTI5Mzc4MjMPZBYCAgMPZBYCAgUPDxYCHgRUZXh0BRPmlrDkuJbnuqrnu7zlkIhCNFU2ZGRkjRbsNqQ/sVX5jvXbUXkna3oY1oY=">
+</div>
+
+<div>
+
+	<input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="DF995BC3">
+</div>  
+    <input name="hdMinutes" type="hidden" id="hdMinutes" value="60">  
+    <input name="hdSecondsUsed" type="hidden" id="hdSecondsUsed" value="0">   
+    <div style="height:51px;"></div>
+    <div class="content_test" style="top:0;">
+        <div class="class_mag class_main_tab">
+            <div class="test_frame"><div class="test_tit_1"><ul><li>Listening Comprehension</li></ul></div><div class="test_tit_2"><ul><li>Section A</li></ul></div><div class="test_direction"><ul><li><b>Directions:</b> In this section, you will hear ten statements. Numbers 1 to 6 are based on Text A while the rest are based on Text B. Each statement will be read ONLY ONCE. Listen carefully and decide whether each statement is true or false.</li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>1. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_32460895B47F4C959D1818153EDB98CD_1" onclick="PlaySound('1F76B2096E6648DA84DB6B1CA110921C.mp3','32460895B47F4C959D1818153EDB98CD_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_1"></span><li><input type="radio" name="rd32460895B47F4C959D1818153EDB98CD_1" id="rd32460895B47F4C959D1818153EDB98CD_1_1" onclick="MarkChoiceQuestionDone(1);
+												"><label for="rd32460895B47F4C959D1818153EDB98CD_1_1">A) T</label></li><li><input type="radio" name="rd32460895B47F4C959D1818153EDB98CD_1" id="rd32460895B47F4C959D1818153EDB98CD_1_2" onclick="MarkChoiceQuestionDone(1);
+												"><label for="rd32460895B47F4C959D1818153EDB98CD_1_2">B) F</label></li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>2. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_2191EC55D3124E3083274CC9AADC2721_1" onclick="PlaySound('919CB9260D58405AB3FE3DD62E279BF9.mp3','2191EC55D3124E3083274CC9AADC2721_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_2"></span><li><input type="radio" name="rd2191EC55D3124E3083274CC9AADC2721_1" id="rd2191EC55D3124E3083274CC9AADC2721_1_1" onclick="MarkChoiceQuestionDone(2);
+												"><label for="rd2191EC55D3124E3083274CC9AADC2721_1_1">A) T</label></li><li><input type="radio" name="rd2191EC55D3124E3083274CC9AADC2721_1" id="rd2191EC55D3124E3083274CC9AADC2721_1_2" onclick="MarkChoiceQuestionDone(2);
+												"><label for="rd2191EC55D3124E3083274CC9AADC2721_1_2">B) F</label></li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>3. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_D8A024999DC24DD996F93D0EBA8A385D_1" onclick="PlaySound('AC257C10C0C340A39FFA747A6B78F06D.mp3','D8A024999DC24DD996F93D0EBA8A385D_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_3"></span><li><input type="radio" name="rdD8A024999DC24DD996F93D0EBA8A385D_1" id="rdD8A024999DC24DD996F93D0EBA8A385D_1_1" onclick="MarkChoiceQuestionDone(3);
+												"><label for="rdD8A024999DC24DD996F93D0EBA8A385D_1_1">A) T</label></li><li><input type="radio" name="rdD8A024999DC24DD996F93D0EBA8A385D_1" id="rdD8A024999DC24DD996F93D0EBA8A385D_1_2" onclick="MarkChoiceQuestionDone(3);
+												"><label for="rdD8A024999DC24DD996F93D0EBA8A385D_1_2">B) F</label></li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>4. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_2BE8F463E05C4A99AFDFAFEE0CE8D513_1" onclick="PlaySound('8A9DBDBB07A5433CB764F4D2C83287F3.mp3','2BE8F463E05C4A99AFDFAFEE0CE8D513_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_4"></span><li><input type="radio" name="rd2BE8F463E05C4A99AFDFAFEE0CE8D513_1" id="rd2BE8F463E05C4A99AFDFAFEE0CE8D513_1_1" onclick="MarkChoiceQuestionDone(4);
+												"><label for="rd2BE8F463E05C4A99AFDFAFEE0CE8D513_1_1">A) T</label></li><li><input type="radio" name="rd2BE8F463E05C4A99AFDFAFEE0CE8D513_1" id="rd2BE8F463E05C4A99AFDFAFEE0CE8D513_1_2" onclick="MarkChoiceQuestionDone(4);
+												"><label for="rd2BE8F463E05C4A99AFDFAFEE0CE8D513_1_2">B) F</label></li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>5. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_F688B43B688F467BAC5D6E50DE21190F_1" onclick="PlaySound('0B7AE1A3412A4F96BE38FD3E82F6DA57.mp3','F688B43B688F467BAC5D6E50DE21190F_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_5"></span><li><input type="radio" name="rdF688B43B688F467BAC5D6E50DE21190F_1" id="rdF688B43B688F467BAC5D6E50DE21190F_1_1" onclick="MarkChoiceQuestionDone(5);
+												"><label for="rdF688B43B688F467BAC5D6E50DE21190F_1_1">A) T</label></li><li><input type="radio" name="rdF688B43B688F467BAC5D6E50DE21190F_1" id="rdF688B43B688F467BAC5D6E50DE21190F_1_2" onclick="MarkChoiceQuestionDone(5);
+												"><label for="rdF688B43B688F467BAC5D6E50DE21190F_1_2">B) F</label></li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>6. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_1AB1893B7BBB4CB78936F75B29FEF5DE_1" onclick="PlaySound('7CE0DF23F9B04E968D8520D091407277.mp3','1AB1893B7BBB4CB78936F75B29FEF5DE_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_6"></span><li><input type="radio" name="rd1AB1893B7BBB4CB78936F75B29FEF5DE_1" id="rd1AB1893B7BBB4CB78936F75B29FEF5DE_1_1" onclick="MarkChoiceQuestionDone(6);
+												"><label for="rd1AB1893B7BBB4CB78936F75B29FEF5DE_1_1">A) T</label></li><li><input type="radio" name="rd1AB1893B7BBB4CB78936F75B29FEF5DE_1" id="rd1AB1893B7BBB4CB78936F75B29FEF5DE_1_2" onclick="MarkChoiceQuestionDone(6);
+												"><label for="rd1AB1893B7BBB4CB78936F75B29FEF5DE_1_2">B) F</label></li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>7. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_7AD59265E96049F29EA3921793927040_1" onclick="PlaySound('4D8E693DAF5F40F6A87B28DF8F701C2C.mp3','7AD59265E96049F29EA3921793927040_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_7"></span><li><input type="radio" name="rd7AD59265E96049F29EA3921793927040_1" id="rd7AD59265E96049F29EA3921793927040_1_1" onclick="MarkChoiceQuestionDone(7);
+												"><label for="rd7AD59265E96049F29EA3921793927040_1_1">A) T</label></li><li><input type="radio" name="rd7AD59265E96049F29EA3921793927040_1" id="rd7AD59265E96049F29EA3921793927040_1_2" onclick="MarkChoiceQuestionDone(7);
+												"><label for="rd7AD59265E96049F29EA3921793927040_1_2">B) F</label></li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>8. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_E12195B3BE6442D3B8447B29236404AC_1" onclick="PlaySound('900CB0BF5F794B91930A229DF3461E1E.mp3','E12195B3BE6442D3B8447B29236404AC_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_8"></span><li><input type="radio" name="rdE12195B3BE6442D3B8447B29236404AC_1" id="rdE12195B3BE6442D3B8447B29236404AC_1_1" onclick="MarkChoiceQuestionDone(8);
+												"><label for="rdE12195B3BE6442D3B8447B29236404AC_1_1">A) T</label></li><li><input type="radio" name="rdE12195B3BE6442D3B8447B29236404AC_1" id="rdE12195B3BE6442D3B8447B29236404AC_1_2" onclick="MarkChoiceQuestionDone(8);
+												"><label for="rdE12195B3BE6442D3B8447B29236404AC_1_2">B) F</label></li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>9. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_6602E284724341BCB554D127E59D8327_1" onclick="PlaySound('12E4A911092044F7973A6680E60E4243.mp3','6602E284724341BCB554D127E59D8327_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_9"></span><li><input type="radio" name="rd6602E284724341BCB554D127E59D8327_1" id="rd6602E284724341BCB554D127E59D8327_1_1" onclick="MarkChoiceQuestionDone(9);
+												"><label for="rd6602E284724341BCB554D127E59D8327_1_1">A) T</label></li><li><input type="radio" name="rd6602E284724341BCB554D127E59D8327_1" id="rd6602E284724341BCB554D127E59D8327_1_2" onclick="MarkChoiceQuestionDone(9);
+												"><label for="rd6602E284724341BCB554D127E59D8327_1_2">B) F</label></li></ul></div><div class="test_s_1 itemDiv"><ul class="test_tit_3"><li>10. 
+										</li><li class="play_but listening_play"><input type="button" id="btnPlay_9556EB8B6BFB4B1085F79A3C1C92BC63_1" onclick="PlaySound('D3A23C4574904326BEE1372C0033BD2B.mp3','9556EB8B6BFB4B1085F79A3C1C92BC63_1');" value="播放（1次机会）"></li></ul><ul class="test_list choiceList"><span id="question_10"></span><li><input type="radio" name="rd9556EB8B6BFB4B1085F79A3C1C92BC63_1" id="rd9556EB8B6BFB4B1085F79A3C1C92BC63_1_1" onclick="MarkChoiceQuestionDone(10);
+												"><label for="rd9556EB8B6BFB4B1085F79A3C1C92BC63_1_1">A) T</label></li><li><input type="radio" name="rd9556EB8B6BFB4B1085F79A3C1C92BC63_1" id="rd9556EB8B6BFB4B1085F79A3C1C92BC63_1_2" onclick="MarkChoiceQuestionDone(10);
+												"><label for="rd9556EB8B6BFB4B1085F79A3C1C92BC63_1_2">B) F</label></li></ul></div></div>
+            <div class="test_but_1" style="padding-bottom:20px;">
+                <li>
+                    <input id="btnPrevPart" type="button" value="上一部分" onclick="SelPrevPart();" style="display:none;">
+                    <input id="btnNextPart" type="button" value="保存，进入下一部分" onclick="SelNextPart();" style="">
+                    <input id="btnBottomSubmit" type="button" value="交 卷" onclick="SubmitTest()" style="display:none;">
+                </li>
+            </div>
+        </div>
+        <div class="class_4" id="sidebar">
+            <ul class="class_4_1">
+                <li class="class_4_1_1t"><span id="lblTestName">新世纪综合B4U6</span></li></ul>
+            <ul class="answer_sheet" id="ulAnswerSheet"><li class="answer_sheet_tit"><a href="javascript:void(0);">Listening Comprehension</a></li><li class="answer_sheet_main"><span id="asSpan_1"><a id="aQuestion1" href="javascript:SelQuestion(1, 1);">1</a></span><span id="asSpan_2"><a id="aQuestion2" href="javascript:SelQuestion(1, 2);">2</a></span><span id="asSpan_3"><a id="aQuestion3" href="javascript:SelQuestion(1, 3);">3</a></span><span id="asSpan_4"><a id="aQuestion4" href="javascript:SelQuestion(1, 4);">4</a></span><span id="asSpan_5"><a id="aQuestion5" href="javascript:SelQuestion(1, 5);">5</a></span><span id="asSpan_6"><a id="aQuestion6" href="javascript:SelQuestion(1, 6);">6</a></span><span id="asSpan_7"><a id="aQuestion7" href="javascript:SelQuestion(1, 7);">7</a></span><span id="asSpan_8"><a id="aQuestion8" href="javascript:SelQuestion(1, 8);">8</a></span><span id="asSpan_9"><a id="aQuestion9" href="javascript:SelQuestion(1, 9);">9</a></span><span id="asSpan_10"><a id="aQuestion10" href="javascript:SelQuestion(1, 10);">10</a></span></li><li class="answer_sheet_tit"><a href="javascript:void(0);">Reading Comprehension</a></li><li class="answer_sheet_main"><span id="asSpan_11"><a id="aQuestion11" href="javascript:SelQuestion(2, 11);">11</a></span><span id="asSpan_12"><a id="aQuestion12" href="javascript:SelQuestion(2, 12);">12</a></span><span id="asSpan_13"><a id="aQuestion13" href="javascript:SelQuestion(2, 13);">13</a></span><span id="asSpan_14"><a id="aQuestion14" href="javascript:SelQuestion(2, 14);">14</a></span><span id="asSpan_15"><a id="aQuestion15" href="javascript:SelQuestion(2, 15);">15</a></span><span id="asSpan_16"><a id="aQuestion16" href="javascript:SelQuestion(2, 16);">16</a></span><span id="asSpan_17"><a id="aQuestion17" href="javascript:SelQuestion(2, 17);">17</a></span><span id="asSpan_18"><a id="aQuestion18" href="javascript:SelQuestion(2, 18);">18</a></span><span id="asSpan_19"><a id="aQuestion19" href="javascript:SelQuestion(2, 19);">19</a></span><span id="asSpan_20"><a id="aQuestion20" href="javascript:SelQuestion(2, 20);">20</a></span><span id="asSpan_21"><a id="aQuestion21" href="javascript:SelQuestion(2, 21);">21</a></span><span id="asSpan_22"><a id="aQuestion22" href="javascript:SelQuestion(2, 22);">22</a></span><span id="asSpan_23"><a id="aQuestion23" href="javascript:SelQuestion(2, 23);">23</a></span><span id="asSpan_24"><a id="aQuestion24" href="javascript:SelQuestion(2, 24);">24</a></span><span id="asSpan_25"><a id="aQuestion25" href="javascript:SelQuestion(2, 25);">25</a></span><span id="asSpan_26"><a id="aQuestion26" href="javascript:SelQuestion(2, 26);">26</a></span><span id="asSpan_27"><a id="aQuestion27" href="javascript:SelQuestion(2, 27);">27</a></span><span id="asSpan_28"><a id="aQuestion28" href="javascript:SelQuestion(2, 28);">28</a></span><span id="asSpan_29"><a id="aQuestion29" href="javascript:SelQuestion(2, 29);">29</a></span><span id="asSpan_30"><a id="aQuestion30" href="javascript:SelQuestion(2, 30);">30</a></span></li><li class="answer_sheet_tit"><a href="javascript:void(0);">Vocabulary and Structure</a></li><li class="answer_sheet_main"><span id="asSpan_31"><a id="aQuestion31" href="javascript:SelQuestion(3, 31);">31</a></span><span id="asSpan_32"><a id="aQuestion32" href="javascript:SelQuestion(3, 32);">32</a></span><span id="asSpan_33"><a id="aQuestion33" href="javascript:SelQuestion(3, 33);">33</a></span><span id="asSpan_34"><a id="aQuestion34" href="javascript:SelQuestion(3, 34);">34</a></span><span id="asSpan_35"><a id="aQuestion35" href="javascript:SelQuestion(3, 35);">35</a></span><span id="asSpan_36"><a id="aQuestion36" href="javascript:SelQuestion(3, 36);">36</a></span><span id="asSpan_37"><a id="aQuestion37" href="javascript:SelQuestion(3, 37);">37</a></span><span id="asSpan_38"><a id="aQuestion38" href="javascript:SelQuestion(3, 38);">38</a></span><span id="asSpan_39"><a id="aQuestion39" href="javascript:SelQuestion(3, 39);">39</a></span><span id="asSpan_40"><a id="aQuestion40" href="javascript:SelQuestion(3, 40);">40</a></span><span id="asSpan_41"><a id="aQuestion41" href="javascript:SelQuestion(3, 41);">41</a></span><span id="asSpan_42"><a id="aQuestion42" href="javascript:SelQuestion(3, 42);">42</a></span><span id="asSpan_43"><a id="aQuestion43" href="javascript:SelQuestion(3, 43);">43</a></span><span id="asSpan_44"><a id="aQuestion44" href="javascript:SelQuestion(3, 44);">44</a></span><span id="asSpan_45"><a id="aQuestion45" href="javascript:SelQuestion(3, 45);">45</a></span><span id="asSpan_46"><a id="aQuestion46" href="javascript:SelQuestion(3, 46);">46</a></span><span id="asSpan_47"><a id="aQuestion47" href="javascript:SelQuestion(3, 47);">47</a></span><span id="asSpan_48"><a id="aQuestion48" href="javascript:SelQuestion(3, 48);">48</a></span><span id="asSpan_49"><a id="aQuestion49" href="javascript:SelQuestion(3, 49);">49</a></span><span id="asSpan_50"><a id="aQuestion50" href="javascript:SelQuestion(3, 50);">50</a></span></li><li class="answer_sheet_tit"><a href="javascript:void(0);">Error Correction</a></li><li class="answer_sheet_main"><span id="asSpan_51"><a id="aQuestion51" href="javascript:SelQuestion(4, 51);">51</a></span><span id="asSpan_52"><a id="aQuestion52" href="javascript:SelQuestion(4, 52);">52</a></span><span id="asSpan_53"><a id="aQuestion53" href="javascript:SelQuestion(4, 53);">53</a></span><span id="asSpan_54"><a id="aQuestion54" href="javascript:SelQuestion(4, 54);">54</a></span><span id="asSpan_55"><a id="aQuestion55" href="javascript:SelQuestion(4, 55);">55</a></span><span id="asSpan_56"><a id="aQuestion56" href="javascript:SelQuestion(4, 56);">56</a></span><span id="asSpan_57"><a id="aQuestion57" href="javascript:SelQuestion(4, 57);">57</a></span><span id="asSpan_58"><a id="aQuestion58" href="javascript:SelQuestion(4, 58);">58</a></span><span id="asSpan_59"><a id="aQuestion59" href="javascript:SelQuestion(4, 59);">59</a></span><span id="asSpan_60"><a id="aQuestion60" href="javascript:SelQuestion(4, 60);">60</a></span></li><li class="answer_sheet_tit"><a href="javascript:void(0);">Translation</a></li><li class="answer_sheet_main"><span id="asSpan_61"><a id="aQuestion61" href="javascript:SelQuestion(5, 61);">61</a></span><span id="asSpan_62"><a id="aQuestion62" href="javascript:SelQuestion(5, 62);">62</a></span><span id="asSpan_63"><a id="aQuestion63" href="javascript:SelQuestion(5, 63);">63</a></span><span id="asSpan_64"><a id="aQuestion64" href="javascript:SelQuestion(5, 64);">64</a></span></li></ul>
+        </div>
+    </div>    
+	<div id="divSound" style="height:0px;position:absolute;left:200px;"><div id="soundplayer"></div></div>
+    
+
+<script type="text/javascript">
+//<![CDATA[
+curPartNum=1;sttid=296114;$(document).ready(function(){StartTimer();});//]]>
+</script>
+</form>
+
+
+</body></html>
